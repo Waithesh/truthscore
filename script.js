@@ -13,7 +13,35 @@ const DEMO_VIDEO_ID = 'dQw4w9WgXcQ';
 const SHEETS_URL    = 'https://script.google.com/macros/s/AKfycbz_Gm3jeFFj8WzWatTj5CHegqFX1rtbosTsz2jEkMpwyAcZrTmkdNXb6bLMCH1LqmmN/exec';
 // PayPal hosted button is now injected directly in index.html
 
-const LS_KEY        = 'ts_email_given'; // localStorage key for returning users
+const LS_KEY        = 'ts_email_given'; // localStorage key for returning users (legacy — no longer used to bypass the gate, see note below)
+
+// ── DAILY FREE SCAN LIMIT ──────────────────────────
+// 3 full scans/day, no email required. Beyond that, the result stays
+// locked and the gate points to Pro instead of offering a free
+// unlock-by-email — the old "give an email, unlock forever, free" gate
+// meant nobody ever needed to pay. This is tracked per-browser via
+// localStorage, so it's not bulletproof (clearing storage or an
+// incognito window resets it) — there's no login system to attach a
+// real per-person limit to, so this is the honest ceiling of what a
+// no-backend-auth app can enforce.
+const FREE_DAILY_LIMIT = 3;
+const SCAN_COUNT_KEY   = 'ts_scan_count';
+const SCAN_DATE_KEY    = 'ts_scan_date';
+
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+// Increments today's scan count (resetting it first if the stored date
+// isn't today) and returns the new total.
+function incrementScanCount() {
+  try {
+    const today = todayStr();
+    const sameDay = localStorage.getItem(SCAN_DATE_KEY) === today;
+    const count = (sameDay ? parseInt(localStorage.getItem(SCAN_COUNT_KEY) || '0', 10) : 0) + 1;
+    localStorage.setItem(SCAN_DATE_KEY, today);
+    localStorage.setItem(SCAN_COUNT_KEY, String(count));
+    return count;
+  } catch(e) { return 1; } // storage unavailable — fail open rather than block the scan
+}
 
 // ── UTILS ────────────────────────────────────────
 const $  = id  => document.getElementById(id);
@@ -72,8 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('copyBtn') ?.addEventListener('click', doCopy);
   $('newBtn')  ?.addEventListener('click', doReset);
 
-  $('unlockBtn') ?.addEventListener('click',    unlockReport);
-  $('gateEmail') ?.addEventListener('keypress', e => { if (e.key === 'Enter') unlockReport(); });
+  $('unlockBtn') ?.addEventListener('click',    goPro);
 
   $('proModal')?.addEventListener('click', e => {
     if (e.target === $('proModal')) closeProModal();
@@ -313,20 +340,30 @@ function renderResults(payload) {
     'Checked at ' + (location.pathname.startsWith('/report/') ? location.href : 'https://truthscore.online')
   ].join('\n');
 
-  // Reset gate UI with better message
+  // Reset gate UI
   const gs = $('gateStatus');
-  if (gs) { gs.textContent = 'Free forever. No spam. Unsubscribe anytime.'; gs.style.color = 'var(--muted)'; }
-  const ge = $('gateEmail');  if (ge) ge.value = '';
-  const ub = $('unlockBtn');  if (ub) { ub.disabled = false; ub.textContent = 'Reveal Full Report'; }
+  if (gs) { gs.textContent = 'Pro removes the daily limit entirely.'; gs.style.color = 'var(--muted)'; }
 
-  // Returning users skip the gate automatically
-  if (hasGivenEmail()) {
+  // ── Daily free-scan gate ──────────────────────────
+  // <= 3 scans today: full reveal, no gate, no email. Beyond that: stays
+  // locked, and the gate pushes to Pro instead of a free email-unlock.
+  const scansUsedToday = incrementScanCount();
+  const scansLeft      = Math.max(0, FREE_DAILY_LIMIT - scansUsedToday);
+  const counterEl       = $('scanCounterNote');
+
+  if (scansUsedToday <= FREE_DAILY_LIMIT) {
     $('emailGate')?.classList.add('hidden');
     revealLockedUI();
     renderFlags();
+    if (counterEl) {
+      counterEl.textContent = scansLeft > 0
+        ? scansLeft + ' free scan' + (scansLeft === 1 ? '' : 's') + ' left today'
+        : 'That was your last free scan today';
+    }
   } else {
     $('emailGate')?.classList.remove('hidden');
     $('flagsCard') ?.classList.add('hidden');
+    if (counterEl) counterEl.textContent = 'Daily free limit reached (' + FREE_DAILY_LIMIT + '/day)';
   }
 
   $('resultSection')?.classList.remove('hidden');
@@ -414,47 +451,16 @@ function renderFlags() {
   fc.classList.remove('hidden');
 }
 
-// ── EMAIL GATE UNLOCK ─────────────────────────────
-async function unlockReport() {
-  const emailEl  = $('gateEmail');
-  const statusEl = $('gateStatus');
-  const btn      = $('unlockBtn');
-  const email    = emailEl?.value.trim() || '';
-
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    if (statusEl) { statusEl.textContent = '⚠️ Please enter a valid email address.'; statusEl.style.color = '#fca5a5'; }
-    emailEl?.focus();
-    return;
-  }
-
-  if (btn)      { btn.disabled = true; btn.textContent = 'Unlocking…'; }
-  if (statusEl) { statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--muted)'; }
-
-  // Save to Google Sheets
-  saveToSheets({
-    type:       'unlock',
-    email:      email,
-    videoTitle: _title         || '',
-    score:      _score != null ? String(_score) : '',
-    timestamp:  new Date().toISOString()
-  });
-
-  // Remember so they never see this gate again
-  rememberEmail(email);
-
-  // Reveal everything
-  $('emailGate')?.classList.add('hidden');
-  revealLockedUI();
-  renderFlags();
-
-  if (btn) { btn.disabled = false; btn.textContent = 'Reveal Full Report'; }
-
-  setTimeout(() => {
-    const fc = $('flagsCard');
-    if (fc) window.scrollTo({ top: fc.offsetTop - 80, behavior: 'smooth' });
-  }, 100);
+// ── DAILY LIMIT → GO PRO ──────────────────────────
+// Replaces the old unlockReport() email-gate handler. Scrolls to the
+// pricing section (or opens the waitlist modal as a fallback if that
+// section isn't on the page for some reason).
+function goPro() {
+  const pricing = document.getElementById('pricing');
+  if (pricing) pricing.scrollIntoView({ behavior: 'smooth' });
+  else openProModal();
 }
-window.unlockReport = unlockReport;
+window.goPro = goPro;
 
 // ── ACTION BUTTONS ────────────────────────────────
 function doShare() {
@@ -538,7 +544,6 @@ async function submitProWaitlist() {
 window.openProModal      = openProModal;
 window.closeProModal     = closeProModal;
 window.submitProWaitlist = submitProWaitlist;
-window.unlockReport      = unlockReport;
 
 // ── PRO UPGRADE POPUP ─────────────────────────────
 // Appears 5 seconds after results load
