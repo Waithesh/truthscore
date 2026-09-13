@@ -64,6 +64,15 @@
         .unlock-btn:hover{background:#d97706}
         .unlock-btn:disabled{background:#666;cursor:not-allowed}
         .gate-status{font-size:0.85rem;color:var(--muted)}
+
+        /* PayPal Hosted Button — fixed-size wrapper.
+           `zoom` scaled the whole iframe unpredictably (that's why the
+           button still looked huge with tiny, uneven text). This instead
+           clips to an exact pixel box and scales the button inside it by
+           a known factor, so the box size and the text size are both
+           under our control instead of fighting each other. */
+        .paypal-btn-wrap{width:180px;height:46px;margin:0 auto 16px;overflow:hidden;position:relative}
+        .paypal-btn-wrap > div{transform:scale(0.6);transform-origin:top left;width:166.7%}
         .input-error{color:var(--red);font-size:0.9rem;margin-top:8px;text-align:left}
         .hidden{display:none!important}
         
@@ -218,8 +227,8 @@
               <span style="background:rgba(255,255,255,0.06);padding:6px 14px;border-radius:20px;font-size:0.9rem">✅ Priority speed</span>
             </div>
             <!-- PayPal Hosted Button -->
-            <div style="width:100%;max-width:160px;margin:0 auto 16px;overflow:hidden">
-              <div id="paypal-container-pricing" style="zoom:0.45"></div>
+            <div class="paypal-btn-wrap">
+              <div id="paypal-container-pricing"></div>
             </div>
             <p style="font-size:0.85rem;color:var(--muted);margin-top:8px">🔒 Secure checkout via PayPal · Cancel anytime</p>
             <p style="font-size:0.8rem;color:#555;margin-top:6px">Also keeps the free tier alive for everyone 🙏</p>
@@ -246,18 +255,23 @@
           window.renderPayPalButton('paypal-container-pricing');
         </script>
 
-        <!-- Email Gate Section -->
-        <section class="email-gate" id="emailGate">
-            <h3>🔓 Unlock Full Red Flag Report</h3>
-            <p>Drop your email to see every warning — free, no spam, unsubscribe anytime.</p>
-            <input type="email" id="gateEmail" class="email-input" placeholder="your@email.com" aria-label="Email address">
-            <button id="unlockBtn" class="unlock-btn">Reveal Report</button>
-            <p id="gateStatus" class="gate-status">Free forever. No spam. Unsubscribe anytime.</p>
-            
+        <!-- Daily-Limit Gate Section — hidden unless the user has used up
+             today's free scans. Scans under the daily limit are revealed
+             in full with no gate at all (see script.js). This used to be
+             an "enter your email to unlock, free forever" gate — that
+             design let anyone unlock unlimited scans for free with zero
+             friction, which early feedback flagged as a reason nobody
+             converted to Pro. -->
+        <section class="email-gate hidden" id="emailGate">
+            <h3>🔒 Daily Free Limit Reached</h3>
+            <p>You've used today's 3 free scans. Come back tomorrow for 3 more, or go unlimited with Pro.</p>
+            <button id="unlockBtn" class="unlock-btn">⚡ Upgrade to Pro</button>
+            <p id="gateStatus" class="gate-status">Pro removes the daily limit entirely.</p>
+
             <!-- ✅ CHANGE 2: Sample Report Button - ADDED HERE -->
             <div style="margin-top: 15px; text-align: center;">
               <p style="font-size: 14px; color: var(--muted); margin-bottom: 8px;">
-                Not ready to share your email? 
+                Not ready to upgrade?
               </p>
               <button onclick="showSampleReport()" 
                       style="background: #f0f0f0; color: #333; border: 1px solid var(--border); 
@@ -275,14 +289,15 @@
                 <h3 id="videoTitle">Video Title</h3>
                 <p class="meta" id="channelInfo">Channel • X yrs old</p>
                 <p class="meta" id="metaInfo">X views • X likes • X comments</p>
+                <p class="meta" id="scanCounterNote" style="color:var(--amber);font-weight:600"></p>
             </div>
 
-            <!-- Score Ring (locked until email) -->
+            <!-- Score Ring -->
             <div class="score-ring ring-locked" id="scoreRing">
                 <span id="ringNum">?</span>
             </div>
 
-            <!-- Mini Stats (locked until email) -->
+            <!-- Mini Stats -->
             <div class="mini-stats">
                 <div class="mini-stat">
                     <div class="mini-stat-value stat-locked" id="channelTrust">??/100</div>
@@ -298,7 +313,7 @@
                 </div>
             </div>
 
-            <!-- Flags Card (hidden until email) -->
+            <!-- Flags Card -->
             <div class="flags-card hidden" id="flagsCard">
                 <h3>Key Red Flags & Insights</h3>
                 <ul class="flags-list" id="flagsList"></ul>
@@ -347,8 +362,8 @@
                   <span style="background:rgba(255,255,255,0.06);padding:6px 14px;border-radius:20px;font-size:0.9rem">✅ Priority speed</span>
                 </div>
                 <!-- PayPal Hosted Button -->
-                <div style="width:100%;max-width:160px;margin:0 auto 16px;overflow:hidden">
-                  <div id="paypal-container-RJ2LE5FD4KN8C" style="zoom:0.45"></div>
+                <div class="paypal-btn-wrap">
+                  <div id="paypal-container-RJ2LE5FD4KN8C"></div>
                 </div>
                 <!-- SDK already loaded once, and window.renderPayPalButton already defined,
                      by the standalone #pricing section above. script.js calls
