@@ -78,8 +78,15 @@ const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models
 // grounded=true attaches Google Search so Gemini checks the LIVE WEB —
 // scam reports, forum threads, reviews — not just what YouTube's own
 // API says about itself. That's the actual point of this feature.
+//
+// Returns { text, sources }. `sources` comes from Gemini's own grounding
+// metadata — the real pages its search actually visited — not from asking
+// the model to name a "source" in free text. A model-written source string
+// can be wrong or invented; a grounding-metadata URL is the actual page
+// the search tool fetched, which is the difference between a claim you
+// can click and verify vs. one you have to take on faith.
 async function callGemini(prompt, { grounded = false } = {}) {
-  if (!GEMINI_KEY) return null;
+  if (!GEMINI_KEY) return { text: null, sources: [] };
   try {
     const body = { contents: [{ parts: [{ text: prompt }] }] };
     if (grounded) body.tools = [{ google_search: {} }];
@@ -88,11 +95,23 @@ async function callGemini(prompt, { grounded = false } = {}) {
       headers: { 'Content-Type': 'application/json' },
       timeout: 20000
     });
-    const parts = res.data?.candidates?.[0]?.content?.parts || [];
-    return parts.map(p => p.text || '').join('').trim() || null;
+    const candidate = res.data?.candidates?.[0];
+    const parts = candidate?.content?.parts || [];
+    const text  = parts.map(p => p.text || '').join('').trim() || null;
+
+    const chunks = candidate?.groundingMetadata?.groundingChunks || [];
+    const seen = new Set();
+    const sources = [];
+    for (const c of chunks) {
+      const uri   = c?.web?.uri;
+      const title = c?.web?.title || uri;
+      if (uri && !seen.has(uri)) { seen.add(uri); sources.push({ title, url: uri }); }
+    }
+
+    return { text, sources };
   } catch (e) {
     console.warn('[gemini] request failed:', e.response?.data?.error?.message || e.message);
-    return null;
+    return { text: null, sources: [] };
   }
 }
 
@@ -259,7 +278,7 @@ Look specifically for: unverifiable income/results claims, fake urgency or scarc
 cult-like in-group language, fear-based pressure, and vague "secret method" claims. If none are found, return
 a single green flag saying so and a high manipulationScore.`;
 
-  const raw    = await callGemini(prompt, { grounded: false });
+  const { text: raw } = await callGemini(prompt, { grounded: false });
   const parsed = extractJson(raw);
   if (!parsed || typeof parsed.manipulationScore !== 'number' || !Array.isArray(parsed.flags)) {
     console.warn('[gemini-transcript] skipped: bad response shape:', raw ? raw.slice(0, 200) : '(no response)');
@@ -297,13 +316,17 @@ Return ONLY a JSON object, no markdown fences, no extra commentary, in this exac
 If your search turns up nothing notable either way, say so explicitly with one blue flag and a neutral
 score around 60-70. Do not invent findings that your search did not actually surface.`;
 
-  const raw    = await callGemini(prompt, { grounded: true });
+  const { text: raw, sources } = await callGemini(prompt, { grounded: true });
   const parsed = extractJson(raw);
   if (!parsed || typeof parsed.webTrustScore !== 'number' || !Array.isArray(parsed.flags)) {
     console.warn('[gemini-web] skipped: bad response shape:', raw ? raw.slice(0, 200) : '(no response)');
     return null;
   }
-  console.log(`[gemini-web] success — webTrustScore=${parsed.webTrustScore}, flags=${parsed.flags.length}`);
+  console.log(`[gemini-web] success — webTrustScore=${parsed.webTrustScore}, flags=${parsed.flags.length}, sources=${sources.length}`);
+  // Real, clickable pages the search actually visited — this is what
+  // lets someone verify a claim independently instead of trusting the
+  // score at face value.
+  parsed.sources = sources.slice(0, 6);
   return parsed;
 }
 
@@ -571,6 +594,7 @@ async function computeAnalysis(videoId) {
   if (webResult) {
     analysis.flags = [...analysis.flags, ...webResult.flags.map(f => ({ ...f, origin: 'web' }))];
     analysis.webTrustScore = webResult.webTrustScore;
+    analysis.webSources = webResult.sources || []; // real, clickable pages the search actually visited
     weighted.push({ score: webResult.webTrustScore, weight: 0.30 });
   }
 
@@ -627,6 +651,9 @@ function buildReportSummary(responseBody) {
     channelTrustScore: Math.round(analysis.channelTrustScore),
     dislikeRatioPct:   (analysis.likeDislikeRatio * 100).toFixed(1),
     engagementPct:     (analysis.engagementRatio * 100).toFixed(3),
+    webSources:        analysis.webSources || [], // clickable pages backing the web cross-reference flags
+    webChecked:        analysis.webTrustScore     !== undefined, // did the web cross-reference actually run?
+    transcriptChecked: analysis.manipulationScore !== undefined, // did transcript analysis actually run?
     flags:             analysis.flags.map(f => ({
       type: f.type, text: f.text, impact: f.impact || '', source: f.source || '', origin: f.origin || 'youtube'
     }))
