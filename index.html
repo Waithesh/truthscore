@@ -64,6 +64,10 @@
         .unlock-btn:hover{background:#d97706}
         .unlock-btn:disabled{background:#666;cursor:not-allowed}
         .gate-status{font-size:0.85rem;color:var(--muted)}
+        .sources-card{margin-top:16px}
+        .sources-list li{padding:5px 0}
+        .sources-list a{color:var(--blue);text-decoration:none;font-size:0.9rem;word-break:break-word}
+        .sources-list a:hover{text-decoration:underline}
 
         /* PayPal Hosted Button — fixed-size wrapper.
            `zoom` scaled the whole iframe unpredictably (that's why the
@@ -249,6 +253,11 @@
             }
             paypal.HostedButtons({
               hostedButtonId: "RJ2LE5FD4KN8C",
+              // Client-side confirmation only — see the note next to
+              // markProUnlocked() in script.js for the real limitation here.
+              onApprove: function (data) {
+                if (window.markProUnlocked) window.markProUnlocked(data);
+              }
             }).render('#' + containerId);
           };
           // This section is visible from page load, so render right away.
@@ -290,6 +299,7 @@
                 <p class="meta" id="channelInfo">Channel • X yrs old</p>
                 <p class="meta" id="metaInfo">X views • X likes • X comments</p>
                 <p class="meta" id="scanCounterNote" style="color:var(--amber);font-weight:600"></p>
+                <p class="meta" id="signalsNote" style="color:var(--muted);font-size:0.8rem"></p>
             </div>
 
             <!-- Score Ring -->
@@ -317,6 +327,16 @@
             <div class="flags-card hidden" id="flagsCard">
                 <h3>Key Red Flags & Insights</h3>
                 <ul class="flags-list" id="flagsList"></ul>
+            </div>
+
+            <!-- Sources Checked — the real pages the web cross-reference
+                 visited, so a claim like "no footprint online" is
+                 something you can click through and check yourself,
+                 not just take our word for. -->
+            <div class="sources-card hidden" id="sourcesCard">
+                <h3>🔎 Sources Checked</h3>
+                <p style="font-size:0.85rem;color:var(--muted);margin-bottom:10px">See <a href="/methodology.html" style="color:var(--blue)">how the score is calculated</a>.</p>
+                <ul class="sources-list" id="sourcesList" style="list-style:none"></ul>
             </div>
 
             <!-- ✅ CHANGE 3: Testimonials Section - ADDED HERE (after flags, before pro card) -->
@@ -443,7 +463,7 @@
             </div>
             <div class="faq-item">
                 <h4>How accurate is the score?</h4>
-                <p>TruthScore combines 5 independent signals. No automated tool can guarantee accuracy, but multi-signal analysis is significantly more reliable than any single metric alone.</p>
+                <p>TruthScore blends 3 independent signals — YouTube-native metrics, a live web cross-reference search, and (when captions exist) transcript analysis. No automated tool can guarantee accuracy; see <a href="/methodology.html" style="color:var(--blue)">how scoring works</a> for the exact weights and honest limitations of each signal.</p>
             </div>
             <div class="faq-item">
                 <h4>How do you access hidden dislike data?</h4>
@@ -451,7 +471,7 @@
             </div>
             <div class="faq-item">
                 <h4>Do you store my data?</h4>
-                <p>We do not track which videos you analyze. If you unlock a report with your email, that email is stored securely and never sold.</p>
+                <p>We don't require an email to see a scan's results. We don't track which videos you analyze beyond what's needed to serve that video's public report page.</p>
             </div>
         </section>
 
@@ -461,7 +481,7 @@
         <footer>
             <p>⚠️ TruthScore provides risk indicators based on data analysis, not absolute guarantees. Always apply personal judgment and conduct additional research.</p>
             <p style="margin-top:8px">Disclaimer: TruthScore provides probabilistic risk signals from publicly available data. We use the ReturnYouTubeDislike API for hidden dislike data. Results are for informational purposes only.</p>
-            <p style="margin-top:16px">© 2026 TruthScore. All rights reserved. · <a href="/privacy.html">Privacy Policy</a></p>
+            <p style="margin-top:16px">© 2026 TruthScore. All rights reserved. · <a href="/privacy.html">Privacy Policy</a> · <a href="/methodology.html">How Scoring Works</a></p>
         </footer>
     </main>
 
