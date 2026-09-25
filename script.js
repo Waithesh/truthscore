@@ -86,6 +86,7 @@ let _score  = null;   // number or null
 let _title  = '';
 let _report = '';
 let _flags  = [];
+let _webSources = [];
 
 // ── BOOT ─────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -182,10 +183,10 @@ async function runAnalyze(optId) {
   if (!id)  { showErr('Could not find a video ID — please paste the full YouTube URL.'); return; }
 
   // Reset state + UI
-  _score = null; _title = ''; _report = ''; _flags = [];
+  _score = null; _title = ''; _report = ''; _flags = []; _webSources = [];
   $('resultSection')?.classList.add('hidden');
   $('emailGate')    ?.classList.remove('hidden');
-  $('flagsCard')    ?.classList.add('hidden');
+  $('flagsCard')    ?.classList.add('hidden'); $('sourcesCard') ?.classList.add('hidden');
 
   const btn = $('analyzeBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Analyzing…'; }
@@ -261,6 +262,19 @@ function renderResults(payload) {
     : video.likeCount.toLocaleString() + ' likes';
   setHTML('metaInfo', video.viewCount.toLocaleString() + ' views · ' + votesText + ' · ' + video.commentCount.toLocaleString() + ' comments');
 
+  // Honest disclosure of which signals actually ran on THIS scan. Web
+  // check and transcript analysis both depend on the Gemini API being
+  // configured and succeeding — if either is silently skipped (rate
+  // limit, no captions, API down), the score still renders, but it
+  // shouldn't LOOK as rigorous as a scan where all three signals fired.
+  // See the weighting breakdown at /methodology.html.
+  const signalsUsed = [
+    'YouTube ✓',
+    analysis.webTrustScore     !== undefined ? 'Web check ✓'  : 'Web check —',
+    analysis.manipulationScore !== undefined ? 'Transcript ✓' : 'Transcript —'
+  ].join('  ·  ');
+  setText('signalsNote', 'Signals used: ' + signalsUsed);
+
   // ── GATED: Score ring shows "?" until email submitted ──
   const ring = $('scoreRing'), num = $('ringNum');
   if (ring && num) {
@@ -292,6 +306,10 @@ function renderResults(payload) {
     source: f.source || '',
     origin: f.origin || 'youtube'
   }));
+  // The actual pages the web cross-reference searched — what makes a flag
+  // like "claims $50K/month, zero footprint online" checkable instead of
+  // just asserted. See renderFlags() for where these get rendered.
+  _webSources = analysis.webSources || [];
 
   // Store the real values so we can reveal them after unlock
   _realScore       = score;
@@ -347,22 +365,26 @@ function renderResults(payload) {
   // ── Daily free-scan gate ──────────────────────────
   // <= 3 scans today: full reveal, no gate, no email. Beyond that: stays
   // locked, and the gate pushes to Pro instead of a free email-unlock.
+  // Pro users (see isProUser()/markProUnlocked() above) bypass this
+  // entirely and never see the counter or the gate.
   const scansUsedToday = incrementScanCount();
   const scansLeft      = Math.max(0, FREE_DAILY_LIMIT - scansUsedToday);
   const counterEl       = $('scanCounterNote');
 
-  if (scansUsedToday <= FREE_DAILY_LIMIT) {
+  if (isProUser() || scansUsedToday <= FREE_DAILY_LIMIT) {
     $('emailGate')?.classList.add('hidden');
     revealLockedUI();
     renderFlags();
     if (counterEl) {
-      counterEl.textContent = scansLeft > 0
-        ? scansLeft + ' free scan' + (scansLeft === 1 ? '' : 's') + ' left today'
-        : 'That was your last free scan today';
+      counterEl.textContent = isProUser()
+        ? '⚡ Pro — unlimited scans'
+        : (scansLeft > 0
+            ? scansLeft + ' free scan' + (scansLeft === 1 ? '' : 's') + ' left today'
+            : 'That was your last free scan today');
     }
   } else {
     $('emailGate')?.classList.remove('hidden');
-    $('flagsCard') ?.classList.add('hidden');
+    $('flagsCard') ?.classList.add('hidden'); $('sourcesCard') ?.classList.add('hidden');
     if (counterEl) counterEl.textContent = 'Daily free limit reached (' + FREE_DAILY_LIMIT + '/day)';
   }
 
@@ -449,6 +471,28 @@ function renderFlags() {
   });
 
   fc.classList.remove('hidden');
+  renderSources();
+}
+
+// Renders the "Sources Checked" list under the flags card — the real
+// pages Gemini's web search visited, not a model-written guess at a
+// domain name. Omitted entirely (not shown empty) when there's nothing
+// to link to.
+function renderSources() {
+  const card = $('sourcesCard'), ul = $('sourcesList');
+  if (!card || !ul) return;
+  const sources = (_webSources || []).filter(s => s && s.url);
+  if (!sources.length) { card.classList.add('hidden'); return; }
+  ul.innerHTML = '';
+  sources.forEach(s => {
+    const li = document.createElement('li');
+    const a  = document.createElement('a');
+    a.href = s.url; a.target = '_blank'; a.rel = 'noopener noreferrer nofollow';
+    a.textContent = s.title || s.url;
+    li.appendChild(a);
+    ul.appendChild(li);
+  });
+  card.classList.remove('hidden');
 }
 
 // ── DAILY LIMIT → GO PRO ──────────────────────────
@@ -492,10 +536,10 @@ function fbCopy(cb) {
 }
 
 function doReset() {
-  _score = null; _title = ''; _report = ''; _flags = [];
+  _score = null; _title = ''; _report = ''; _flags = []; _webSources = [];
   $('resultSection')?.classList.add('hidden');
   $('emailGate')    ?.classList.remove('hidden');
-  $('flagsCard')    ?.classList.add('hidden');
+  $('flagsCard')    ?.classList.add('hidden'); $('sourcesCard') ?.classList.add('hidden');
   const v = $('videoInput'); if (v) { v.value = ''; v.focus(); }
   if (window.history?.pushState && location.pathname.startsWith('/report/')) {
     history.pushState({}, '', '/');
@@ -564,6 +608,42 @@ function shouldShowProPopup() {
   } catch(e) {}
   return true;
 }
+
+function isProUser() {
+  try { return !!localStorage.getItem(PRO_KEY); } catch(e) { return false; }
+}
+
+// ── PAYMENT CONFIRMATION → UNLOCK ──────────────────
+// Called from index.html's PayPal onApprove callback the moment a
+// checkout completes.
+//
+// HONEST LIMITATION, stated plainly rather than buried: this is a
+// client-side flag only. There is no backend endpoint verifying PayPal's
+// webhook/subscription status, so nothing stops someone from opening
+// devtools and running localStorage.setItem('ts_is_pro','1') to get Pro
+// for free forever — same limitation as the daily counter, but worse,
+// because it's the actual paywall this time. The correct fix is a PayPal
+// webhook hitting a backend endpoint that issues a verified token; that's
+// a real (if fairly small) backend feature, not a one-line patch, and
+// hasn't been built yet. Shipping this client-side confirmation now closes
+// the more urgent bug — a PAYING customer being blocked — while leaving
+// this bypass as a known, disclosed gap rather than a silent one.
+function markProUnlocked(paypalData) {
+  try { localStorage.setItem(PRO_KEY, '1'); } catch(e) {}
+  $('proPopup') && ($('proPopup').style.display = 'none');
+  closeProModal();
+  // If the gate is currently showing (daily limit hit), immediately
+  // reveal the report that was locked, so the payment they just made is
+  // rewarded on the same page instead of requiring a re-scan.
+  if (!$('emailGate')?.classList.contains('hidden')) {
+    $('emailGate')?.classList.add('hidden');
+    revealLockedUI();
+    renderFlags();
+    const counterEl = $('scanCounterNote');
+    if (counterEl) counterEl.textContent = '⚡ Pro — unlimited scans';
+  }
+}
+window.markProUnlocked = markProUnlocked;
 
 function showProPopup() {
   if (!shouldShowProPopup()) return;
