@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Scoring Works — TruthScore</title>
+<meta name="description" content="How TruthScore's score is calculated: the three signals it blends, their weights, and their honest limitations.">
+<style>
+  :root{--bg:#080808;--fg:#f0f0f0;--muted:#999;--border:#1e1e1e;--blue:#3b82f6;--amber:#f59e0b;--green:#22c55e;--red:#ff4d4d}
+  body{background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+       max-width:760px;margin:0 auto;padding:50px 20px 80px;line-height:1.6}
+  h1{font-size:1.9rem;margin-bottom:6px}
+  .updated{color:var(--muted);font-size:0.9rem;margin-bottom:36px}
+  h2{font-size:1.2rem;margin-top:36px;margin-bottom:10px;border-top:1px solid var(--border);padding-top:24px}
+  p,li{color:#ccc}
+  a{color:var(--blue)}
+  code{background:#151515;padding:1px 6px;border-radius:4px;font-size:0.9em}
+  ul{padding-left:20px}
+  table{width:100%;border-collapse:collapse;margin:16px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);font-size:0.95rem}
+  th{color:var(--muted);font-weight:600}
+  .tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:0.8rem;font-weight:600}
+  .tag-weight{background:#1a1a25;color:var(--amber)}
+  .callout{background:#12121a;border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin:18px 0}
+</style>
+</head>
+<body>
+  <h1>How the TruthScore Score Works</h1>
+  <p class="updated">Written because a creator we asked to review the product asked, reasonably, to see this before recommending it to anyone. This page describes what the code actually does, not a simplified marketing version of it.</p>
+
+  <h2>Three signals, blended</h2>
+  <p>Every score is a weighted average of up to three independent checks. Not every video gets all three —
+  the weights below re-normalize automatically so a missing signal doesn't silently drag the score toward zero.</p>
+  <table>
+    <tr><th>Signal</th><th>Weight</th><th>What it checks</th></tr>
+    <tr><td>YouTube signals</td><td><span class="tag tag-weight">55%</span></td><td>Title/description keyword patterns (unrealistic income claims, urgency language), engagement ratio vs. view count, comment sentiment, channel age, and — where available — the video's real dislike count (YouTube hid public dislikes in 2021; we pull the underlying number back via the ReturnYouTubeDislike API).</td></tr>
+    <tr><td>Web cross-reference</td><td><span class="tag tag-weight">30%</span></td><td>An AI model with live Google Search access looks for scam reports, complaints, fact-checks, or forum discussion of this specific video or channel anywhere on the web — not just on YouTube. This is what can catch a channel that looks clean by every YouTube metric but has a documented bad reputation elsewhere.</td></tr>
+    <tr><td>Transcript analysis</td><td><span class="tag tag-weight">15%</span></td><td>When captions are available, the same AI model reads the actual spoken content for manipulation patterns — vague "secret method" claims, fear-based pressure, cult-like in-group language. Most videos don't have usable captions, so this signal is a bonus, not a requirement.</td></tr>
+  </table>
+
+  <div class="callout">
+    <strong>Where the "Sources Checked" links come from:</strong> when the web cross-reference runs, the underlying
+    search tool returns the actual pages it visited to reach its conclusion. We show you those exact links — not
+    a domain name the model typed out — specifically so you can open them and judge the evidence yourself instead
+    of trusting our summary of it.
+  </div>
+
+  <h2>What this can get wrong</h2>
+  <p>Being direct about the honest failure modes, because a tool like this is only useful if you know when not to trust it:</p>
+  <ul>
+    <li><strong>The web cross-reference depends on things already being written about a video or channel somewhere.</strong> A brand-new scam with no complaints filed yet will score better than it deserves, simply because there's nothing to find yet.</li>
+    <li><strong>Keyword-based signals can be fooled by phrasing.</strong> A legitimate creator who uses urgency language ("last chance to enroll") will get flagged the same as someone using it manipulatively — the flag notes the pattern, it doesn't prove intent.</li>
+    <li><strong>The dislike count comes from a third-party API</strong> (ReturnYouTubeDislike), not YouTube directly, since YouTube stopped exposing it publicly in 2021. It's a well-established community tool, but it's estimating a number YouTube itself no longer confirms.</li>
+    <li><strong>None of this replaces your own judgment.</strong> The score is a set of probabilistic signals, not a verdict. Read the flags and the sources, not just the number.</li>
+  </ul>
+
+  <h2>Data freshness</h2>
+  <p>Scans are cached for 6 hours to control API costs, so re-scanning the same video shortly after someone else
+  did will return the same result rather than re-running every check.</p>
+
+  <p style="margin-top:40px"><a href="/">← Back to TruthScore</a></p>
+</body>
+</html>
