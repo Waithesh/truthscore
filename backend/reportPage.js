@@ -13,6 +13,14 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+// Only ever allow an http(s) URL into an href. sourceUrl values here come
+// from our own domain-matching against Gemini's grounding metadata, so
+// the risk is low, but a broken/odd URL should render as plain text
+// rather than a dead or unsafe link.
+function safeHttpUrl(u) {
+  try { const p = new URL(u); return (p.protocol === 'http:' || p.protocol === 'https:') ? p.href : null; } catch (e) { return null; }
+}
+
 function bandClass(score) {
   if (score >= 75) return { cls: 'ring-green', color: '#22c55e', verdict: 'Likely Legit' };
   if (score >= 45) return { cls: 'ring-amber', color: '#f59e0b', verdict: 'Be Careful' };
@@ -36,7 +44,10 @@ function flagsHtml(flags) {
     html += `<li class="flags-group-title">${esc(ORIGIN_LABELS[origin] || origin)}</li>`;
     group.forEach(f => {
       const source = f.source && f.source.toLowerCase() !== 'no results found'
-        ? ` <span class="flag-source">— source: ${esc(f.source)}</span>` : '';
+        ? (f.sourceUrl && safeHttpUrl(f.sourceUrl)
+            ? ` — source: <a href="${esc(safeHttpUrl(f.sourceUrl))}" target="_blank" rel="noopener noreferrer nofollow" style="color:var(--blue)">${esc(f.source)} ↗</a>`
+            : ` <span class="flag-source">— source: ${esc(f.source)}</span>`)
+        : '';
       html += `<li class="flag-item">
         <div class="flag-dot ${DOT_CLASS[f.type] || 'fd-amber'}"></div>
         <div>
@@ -47,6 +58,24 @@ function flagsHtml(flags) {
     });
   });
   return html;
+}
+
+// Renders the actual pages Gemini's web search visited to produce the
+// web-cross-reference flags above — this is what makes "claims $50K/month,
+// zero footprint online" a checkable fact instead of a black-box score.
+// Omitted entirely if there's nothing to show, rather than showing an
+// empty "Sources" card.
+function sourcesHtml(webSources) {
+  const sources = (webSources || []).filter(s => s && s.url);
+  if (!sources.length) return '';
+  const items = sources.map(s =>
+    `<li><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer nofollow">${esc(s.title || s.url)}</a></li>`
+  ).join('');
+  return `<div class="sources-card">
+    <h2>🔎 Sources Checked</h2>
+    <p class="hint">The actual pages our web cross-reference searched to produce the flags above — click through and judge for yourself. See <a href="/methodology.html" style="color:var(--blue)">how scoring works</a>.</p>
+    <ul class="sources-list">${items}</ul>
+  </div>`;
 }
 
 function renderReportPage(summary) {
@@ -120,6 +149,15 @@ function renderReportPage(summary) {
   .pro-card{background:linear-gradient(135deg,#1a1a25,#252535);border-radius:20px;padding:32px 24px;margin:40px 0;border:2px solid var(--amber);text-align:center}
   .pro-card h3{font-family:'Syne',sans-serif;margin-bottom:10px;font-size:1.4rem}
   .price{font-size:2rem;font-family:'Syne',sans-serif;font-weight:800;color:var(--amber);margin:8px 0}
+  .paypal-btn-wrap{width:180px;height:46px;margin:0 auto 12px;overflow:hidden;position:relative}
+  .paypal-btn-wrap > div{transform:scale(0.6);transform-origin:top left;width:166.7%}
+  .sources-card{background:var(--card);border-radius:16px;padding:25px;margin:25px 0;border:1px solid var(--border)}
+  .sources-card h2{font-family:'Syne',sans-serif;margin-bottom:6px;font-size:1.1rem}
+  .sources-card p.hint{color:var(--muted);font-size:0.85rem;margin-bottom:12px}
+  .sources-list{list-style:none}
+  .sources-list li{padding:6px 0}
+  .sources-list a{color:var(--blue);text-decoration:none;font-size:0.92rem;word-break:break-word}
+  .sources-list a:hover{text-decoration:underline}
   footer{text-align:center;color:var(--muted);font-size:0.85rem;padding:30px 0}
   footer a{color:var(--blue)}
 </style>
@@ -134,6 +172,7 @@ function renderReportPage(summary) {
   <div class="video-summary">
     <h1>${esc(summary.title)}</h1>
     <p class="meta">${esc(summary.channelTitle)}</p>
+    <p class="meta" style="font-size:0.8rem;color:var(--muted);margin-top:4px">Signals used: YouTube ✓  ·  Web check ${summary.webChecked ? '✓' : '—'}  ·  Transcript ${summary.transcriptChecked ? '✓' : '—'}</p>
   </div>
 
   <div class="score-ring ${band.cls}"><span>${score}%</span></div>
@@ -150,6 +189,8 @@ function renderReportPage(summary) {
     <ul class="flags-list">${flagsHtml(summary.flags)}</ul>
   </div>
 
+  ${sourcesHtml(summary.webSources)}
+
   <div class="action-buttons">
     <button class="action-btn" onclick="window.open('https://x.com/intent/tweet?text=' + encodeURIComponent('${esc(title)}\\n\\n' + window.location.href), '_blank', 'noopener,width=560,height=420')">🐦 Share on X</button>
     <button class="action-btn" id="copyBtn">📋 Copy Link</button>
@@ -160,14 +201,14 @@ function renderReportPage(summary) {
     <h3>⚡ TruthScore Pro</h3>
     <p style="color:var(--muted);margin-bottom:10px">Unlimited scans, live web cross-reference on every video, no email gate.</p>
     <div class="price">$18<span style="font-size:1rem;color:var(--muted);font-weight:400">/month</span></div>
-    <div style="width:100%;max-width:160px;margin:0 auto 12px;overflow:hidden">
-      <div id="paypal-container-report" style="zoom:0.45"></div>
+    <div class="paypal-btn-wrap">
+      <div id="paypal-container-report"></div>
     </div>
     <p style="font-size:0.8rem;color:var(--muted)">🔒 Secure checkout via PayPal · Cancel anytime</p>
   </div>
 
   <footer>
-    Generated by <a href="/">TruthScore</a> — the free YouTube scam detector.
+    Generated by <a href="/">TruthScore</a> — the free YouTube scam detector. · <a href="/methodology.html">How scoring works</a>
   </footer>
 </div>
 
