@@ -300,11 +300,12 @@ function renderResults(payload) {
     ({ red: 1, yellow: 2, blue: 3, green: 4 }[b.type] || 5)
   );
   _flags = sorted.map(f => ({
-    cls:    f.type === 'red' ? 'fd-red' : (f.type === 'yellow' || f.type === 'blue') ? 'fd-amber' : 'fd-green',
-    text:   f.text,
-    impact: f.impact || '',
-    source: f.source || '',
-    origin: f.origin || 'youtube'
+    cls:       f.type === 'red' ? 'fd-red' : (f.type === 'yellow' || f.type === 'blue') ? 'fd-amber' : 'fd-green',
+    text:      f.text,
+    impact:    f.impact || '',
+    source:    f.source || '',
+    sourceUrl: f.sourceUrl || '',
+    origin:    f.origin || 'youtube'
   }));
   // The actual pages the web cross-reference searched — what makes a flag
   // like "claims $50K/month, zero footprint online" checkable instead of
@@ -431,6 +432,18 @@ const ORIGIN_LABELS = {
 };
 const ORIGIN_ORDER = ['web', 'transcript', 'youtube'];
 
+// Escapes text before it goes into innerHTML, and only ever allows an
+// http(s) URL into an href — flag text/URLs originate from an AI model
+// reading web content, which is untrusted input even though it isn't
+// directly user-typed. Adding real, clickable hrefs (which is the whole
+// point of this feature) makes proper escaping matter more, not less.
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function safeHttpUrl(u) {
+  try { const p = new URL(u); return (p.protocol === 'http:' || p.protocol === 'https:') ? p.href : null; } catch(e) { return null; }
+}
+
 function renderFlags() {
   const fc = $('flagsCard'), ul = $('flagsList');
   if (!fc || !ul) return;
@@ -458,13 +471,16 @@ function renderFlags() {
     group.forEach(f => {
       const li = document.createElement('li');
       li.className = 'flag-item';
+      const safeUrl = f.sourceUrl && safeHttpUrl(f.sourceUrl);
       const sourceHtml = f.source && f.source.toLowerCase() !== 'no results found'
-        ? ` <span class="flag-source">— source: ${f.source}</span>`
+        ? (safeUrl
+            ? ` — source: <a href="${escHtml(safeUrl)}" target="_blank" rel="noopener noreferrer nofollow">${escHtml(f.source)} ↗</a>`
+            : ` <span class="flag-source">— source: ${escHtml(f.source)}</span>`)
         : '';
       li.innerHTML = `<div class="flag-dot ${f.cls}"></div>
         <div>
-          <div class="flag-text">${f.text}${sourceHtml}</div>
-          ${f.impact ? `<div style="font-size:.78rem;color:var(--muted);margin-top:.2rem;">${f.impact}</div>` : ''}
+          <div class="flag-text">${escHtml(f.text)}${sourceHtml}</div>
+          ${f.impact ? `<div style="font-size:.78rem;color:var(--muted);margin-top:.2rem;">${escHtml(f.impact)}</div>` : ''}
         </div>`;
       ul.appendChild(li);
     });
