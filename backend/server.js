@@ -342,7 +342,30 @@ score around 60-70. Do not invent findings that your search did not actually sur
   // lets someone verify a claim independently instead of trusting the
   // score at face value.
   parsed.sources = sources.slice(0, 6);
+  // Attach a REAL, verified URL directly to each flag whose "source" domain
+  // (e.g. "reddit.com") matches one of the actual pages the search visited.
+  // We deliberately do NOT ask the model to write out a URL itself here —
+  // a model-typed link can be wrong or entirely invented, and a fake link
+  // on a "here's the proof" claim is worse than no link at all. Matching
+  // against grounding metadata means every link that appears is a page
+  // that was actually fetched, not a guess.
+  parsed.flags = attachSourceUrls(parsed.flags, sources);
   return parsed;
+}
+
+function attachSourceUrls(flags, groundingSources) {
+  const byDomain = new Map();
+  for (const s of groundingSources || []) {
+    try {
+      const domain = new URL(s.url).hostname.replace(/^www\./, '');
+      if (!byDomain.has(domain)) byDomain.set(domain, s.url);
+    } catch (e) { /* malformed grounding URL — skip it, don't guess */ }
+  }
+  return flags.map(f => {
+    const domain = (f.source || '').toLowerCase().replace(/^www\./, '').trim();
+    const url = domain && byDomain.get(domain);
+    return url ? { ...f, sourceUrl: url } : f;
+  });
 }
 
 function analyzeVideoData(data) {
@@ -670,7 +693,7 @@ function buildReportSummary(responseBody) {
     webChecked:        analysis.webTrustScore     !== undefined, // did the web cross-reference actually run?
     transcriptChecked: analysis.manipulationScore !== undefined, // did transcript analysis actually run?
     flags:             analysis.flags.map(f => ({
-      type: f.type, text: f.text, impact: f.impact || '', source: f.source || '', origin: f.origin || 'youtube'
+      type: f.type, text: f.text, impact: f.impact || '', source: f.source || '', sourceUrl: f.sourceUrl || '', origin: f.origin || 'youtube'
     }))
   };
 }
