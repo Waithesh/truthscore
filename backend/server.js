@@ -798,19 +798,19 @@ app.get('/report/:videoId', reportLimiter, async (req, res) => {
 });
 
 // ── Dynamic OG image ──────────────────────────────────────────────────
-app.get('/api/og/:videoId', async (req, res) => {
+app.get('/api/og/:videoId', reportLimiter, async (req, res) => {
   const videoId = req.params.videoId;
   const summary = /^[a-zA-Z0-9_-]{11}$/.test(videoId) ? reportStore.get(videoId) : null;
 
   if (!summary) {
     // Unknown video or canvas not installed yet — fall back to a static
     // image rather than a broken preview card.
-    return res.redirect(302, '/assets/images/youtube-scam-alert-2026.jpg.jpg');
+    return res.redirect(302, '/assets/images/youtube-scam-alert-2026.jpg');
   }
 
   const png = renderOgImage(summary);
   if (!png) {
-    return res.redirect(302, '/assets/images/youtube-scam-alert-2026.jpg.jpg');
+    return res.redirect(302, '/assets/images/youtube-scam-alert-2026.jpg');
   }
 
   res.set('Content-Type', 'image/png');
