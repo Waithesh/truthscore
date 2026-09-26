@@ -13,18 +13,33 @@ const { renderOgImage } = require('./ogImage');
 const { renderReportPage, renderNotFoundPage } = require('./reportPage');
 
 const app = express();
-// IMPORTANT: this app now serves the frontend directly (see express.static
-// below) — before this change, index.html lived on GitHub Pages and never
-// passed through helmet's CSP at all, so nothing here was ever tested
-// against it. Helmet's *default* CSP is 'self'-only for scripts/frames,
-// which WOULD silently break the PayPal buttons, Google Fonts, and the
-// gtag analytics snippet the moment this deploys — guessing the exact
-// right allowlist (script-src, connect-src, frame-src, font-src...) and
-// getting even one entry wrong means broken checkout in production with
-// no error the user would ever see. Disabling CSP specifically (keeping
-// every other helmet protection — HSTS, noSniff, frameguard, etc.) matches
-// the security posture this frontend has always actually had, and is the
-// safer default until someone deliberately builds and tests a real allowlist.
+// Render terminates TLS and proxies to this app over plain HTTP internally,
+// setting X-Forwarded-Proto/X-Forwarded-Host. Without trust proxy, req.secure
+// and req.hostname reflect Render's internal connection, not what the visitor
+// actually typed — which would make the redirect below think every request
+// is already on the canonical HTTPS host even when it isn't.
+app.set('trust proxy', 1);
+
+// ── Canonical-domain + HTTPS redirect ─────────────────────────────────
+// Since the domain move to Render, the exact same app is reachable at
+// http://truthscore.online, https://truthscore.onrender.com, and
+// https://truthscore.online — Search Console flagged this correctly as
+// "duplicate without user-selected canonical." A <link rel="canonical">
+// tag (already in index.html/reportPage.js) is only a hint; it doesn't
+// stop Google from crawling the other URLs as separately-reachable pages.
+// A redirect actually collapses them to one indexable URL. Placed before
+// every other route/middleware so nothing else runs for a request that's
+// about to be redirected anyway.
+const CANONICAL_HOST = 'truthscore.online';
+app.use((req, res, next) => {
+  const host = req.hostname;
+  const isCanonical = host === CANONICAL_HOST && req.secure;
+  if (!isCanonical && host && (host === CANONICAL_HOST || host.endsWith('.onrender.com') || host === 'www.truthscore.online')) {
+    return res.redirect(301, `https://${CANONICAL_HOST}${req.originalUrl}`);
+  }
+  next();
+});
+
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: '10kb' })); // this endpoint only ever needs a short URL/ID string
 
