@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>How Scoring Works — TruthScore</title>
-<meta name="description" content="How TruthScore's score is calculated: the three signals it blends, their weights, and their honest limitations.">
+<meta name="description" content="How TruthScore calculates a scam-risk score for YouTube videos: what it checks, how the signals are weighted, and where it can be wrong.">
 <style>
-  :root{--bg:#080808;--fg:#f0f0f0;--muted:#999;--border:#1e1e1e;--blue:#3b82f6;--amber:#f59e0b;--green:#22c55e;--red:#ff4d4d}
+  :root{--bg:#080808;--fg:#f0f0f0;--muted:#999;--border:#1e1e1e;--blue:#3b82f6}
   body{background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
        max-width:760px;margin:0 auto;padding:50px 20px 80px;line-height:1.6}
   h1{font-size:1.9rem;margin-bottom:6px}
@@ -14,50 +14,83 @@
   h2{font-size:1.2rem;margin-top:36px;margin-bottom:10px;border-top:1px solid var(--border);padding-top:24px}
   p,li{color:#ccc}
   a{color:var(--blue)}
-  code{background:#151515;padding:1px 6px;border-radius:4px;font-size:0.9em}
   ul{padding-left:20px}
-  table{width:100%;border-collapse:collapse;margin:16px 0}
-  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);font-size:0.95rem}
-  th{color:var(--muted);font-weight:600}
-  .tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:0.8rem;font-weight:600}
-  .tag-weight{background:#1a1a25;color:var(--amber)}
-  .callout{background:#12121a;border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin:18px 0}
+  table{width:100%;border-collapse:collapse;margin:14px 0}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);color:#ccc;font-size:0.95rem;vertical-align:top}
+  th{color:var(--fg);font-weight:600}
+  .note{background:#111;border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:18px 0}
+  .back{display:inline-block;margin-bottom:24px;font-size:0.9rem}
 </style>
 </head>
 <body>
-  <h1>How the TruthScore Score Works</h1>
-  <p class="updated">Written because a creator we asked to review the product asked, reasonably, to see this before recommending it to anyone. This page describes what the code actually does, not a simplified marketing version of it.</p>
+  <a class="back" href="/">← Back to TruthScore</a>
+  <h1>How Scoring Works</h1>
+  <p class="updated">Last updated: July 2026</p>
 
-  <h2>Three signals, blended</h2>
-  <p>Every score is a weighted average of up to three independent checks. Not every video gets all three —
-  the weights below re-normalize automatically so a missing signal doesn't silently drag the score toward zero.</p>
-  <table>
-    <tr><th>Signal</th><th>Weight</th><th>What it checks</th></tr>
-    <tr><td>YouTube signals</td><td><span class="tag tag-weight">55%</span></td><td>Title/description keyword patterns (unrealistic income claims, urgency language), engagement ratio vs. view count, comment sentiment, channel age, and — where available — the video's real dislike count (YouTube hid public dislikes in 2021; we pull the underlying number back via the ReturnYouTubeDislike API).</td></tr>
-    <tr><td>Web cross-reference</td><td><span class="tag tag-weight">30%</span></td><td>An AI model with live Google Search access looks for scam reports, complaints, fact-checks, or forum discussion of this specific video or channel anywhere on the web — not just on YouTube. This is what can catch a channel that looks clean by every YouTube metric but has a documented bad reputation elsewhere.</td></tr>
-    <tr><td>Transcript analysis</td><td><span class="tag tag-weight">15%</span></td><td>When captions are available, the same AI model reads the actual spoken content for manipulation patterns — vague "secret method" claims, fear-based pressure, cult-like in-group language. Most videos don't have usable captions, so this signal is a bonus, not a requirement.</td></tr>
-  </table>
+  <p>TruthScore gives every YouTube video a score from 0 to 100. A higher score means fewer warning
+  signs were found. The score is built from up to three separate signals, and the report shows
+  which signal each finding came from, so you can judge the evidence yourself.</p>
 
-  <div class="callout">
-    <strong>Where the "Sources Checked" links come from:</strong> when the web cross-reference runs, the underlying
-    search tool returns the actual pages it visited to reach its conclusion. We show you those exact links — not
-    a domain name the model typed out — specifically so you can open them and judge the evidence yourself instead
-    of trusting our summary of it.
+  <div class="note">
+    <strong>Important:</strong> TruthScore estimates risk. It does not prove that a video or creator
+    is legitimate or fraudulent. Treat it as a prompt to look closer, not as a final verdict.
   </div>
 
-  <h2>What this can get wrong</h2>
-  <p>Being direct about the honest failure modes, because a tool like this is only useful if you know when not to trust it:</p>
+  <h2>The three signals</h2>
+  <table>
+    <tr><th>Signal</th><th>What it looks at</th><th>Weight</th></tr>
+    <tr><td>📊 YouTube Signals</td><td>Title, description, engagement, dislikes, comments, and channel history</td><td>55%</td></tr>
+    <tr><td>🌐 Web Research</td><td>Scam reports, complaints, and fact-checks found elsewhere on the web</td><td>30%</td></tr>
+    <tr><td>🎙️ Video Transcript</td><td>What is actually said in the video, when captions are available</td><td>15%</td></tr>
+  </table>
+  <p>If a signal isn't available for a video, for example because the creator turned captions off,
+  it is left out and the remaining signals share its weight proportionally. A missing signal never
+  counts against a video.</p>
+
+  <h2>📊 YouTube Signals</h2>
+  <p>This starts from a neutral baseline and moves up or down based on what it finds:</p>
   <ul>
-    <li><strong>The web cross-reference depends on things already being written about a video or channel somewhere.</strong> A brand-new scam with no complaints filed yet will score better than it deserves, simply because there's nothing to find yet.</li>
-    <li><strong>Keyword-based signals can be fooled by phrasing.</strong> A legitimate creator who uses urgency language ("last chance to enroll") will get flagged the same as someone using it manipulatively — the flag notes the pattern, it doesn't prove intent.</li>
-    <li><strong>The dislike count comes from a third-party API</strong> (ReturnYouTubeDislike), not YouTube directly, since YouTube stopped exposing it publicly in 2021. It's a well-established community tool, but it's estimating a number YouTube itself no longer confirms.</li>
-    <li><strong>None of this replaces your own judgment.</strong> The score is a set of probabilistic signals, not a verdict. Read the flags and the sources, not just the number.</li>
+    <li><strong>Title and description:</strong> unrealistic income or fast-result claims, known scam phrases, urgency or FOMO language, and heavy use of hype emojis.</li>
+    <li><strong>Engagement:</strong> likes and comments relative to views. Very low engagement on a large view count can point to purchased views or bot traffic.</li>
+    <li><strong>Dislike ratio:</strong> YouTube hides public dislike counts, so this uses estimates from the third-party Return YouTube Dislike project. It is an estimate, not an exact figure.</li>
+    <li><strong>Comments:</strong> whether comments are disabled on a popular video, and whether the comments that exist are mostly positive, negative, or explicitly call the video a scam.</li>
+    <li><strong>Affiliate and sales pressure:</strong> the strongest warning needs both a tracked link and urgency or pressure language together. A link shortener on its own is common and only counts as a minor note.</li>
+    <li><strong>Channel trust:</strong> channel age, subscriber count, and upload history. A brand-new, small channel with a sudden viral video is treated as a notable warning sign.</li>
   </ul>
 
-  <h2>Data freshness</h2>
-  <p>Scans are cached for 6 hours to control API costs, so re-scanning the same video shortly after someone else
-  did will return the same result rather than re-running every check.</p>
+  <h2>🌐 Web Research</h2>
+  <p>For every video, TruthScore uses Google's Gemini AI with Google Search to look for scam
+  reports, complaints, refund disputes, and fact-checks tied to the creator or to specific claims in
+  the title. Each finding is listed with where it came from. If the search turns up nothing
+  notable, the report says so and the signal stays neutral. <strong>No results does not mean a
+  creator is trustworthy.</strong> It only means nothing has been found yet, which is common for
+  newer channels.</p>
+  <p>To do this, the video's title, channel name, and description are sent to Google's Gemini API.</p>
 
-  <p style="margin-top:40px"><a href="/">← Back to TruthScore</a></p>
+  <h2>🎙️ Video Transcript</h2>
+  <p>When a video has captions available, TruthScore also checks what is said for unverifiable
+  income claims, fake urgency, pressure tactics, and hidden sales pitches. Many creators disable
+  transcripts, so this signal is often missing. That is why it carries the smallest weight.</p>
+
+  <h2>Reading the result</h2>
+  <ul>
+    <li><strong>75 and above:</strong> Likely Legit. Few or no warning signs were found.</li>
+    <li><strong>Below 75:</strong> the lower the score, the more warning signs were found and the more carefully you should check the claims yourself.</li>
+  </ul>
+  <p>Findings are color-coded: red for strong warning signs, yellow for things worth checking,
+  blue for context, and green for positive signs.</p>
+
+  <h2>Where TruthScore can be wrong</h2>
+  <ul>
+    <li><strong>Keyword checks are blunt.</strong> A legitimate creator can trigger a warning, and a careful scammer can avoid every keyword.</li>
+    <li><strong>Good numbers can be faked.</strong> Engagement, comments, and subscriber counts can be bought or manipulated.</li>
+    <li><strong>Web research is limited to what is findable.</strong> New or small scams may have no public reports yet.</li>
+    <li><strong>AI can make mistakes.</strong> The web research and transcript checks use an AI model, which can misread context.</li>
+    <li><strong>Results are cached.</strong> A video's result may be reused for up to 6 hours, so very recent changes may not show up yet.</li>
+  </ul>
+  <p>Never make a financial decision based on a score alone. If a video asks for money, check the
+  seller independently first.</p>
+
+  <p style="margin-top:40px"><a href="/">Analyze a video</a> · <a href="/privacy.html">Privacy Policy</a></p>
 </body>
 </html>
