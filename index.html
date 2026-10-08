@@ -88,11 +88,9 @@
         .pro-card p{color:var(--muted);margin-bottom:14px;font-size:1rem}
         .paypal-btn{background:#0070ba;color:white;border:none;border-radius:8px;padding:12px 24px;font-weight:600;font-size:1rem;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
         .paypal-btn:hover{background:#005ea6}
-        /* PayPal's hosted-button iframe injects its own inline width/height,
-           which ignores a wrapper div's max-width — has to be forced on the
-           iframe itself with !important or it renders oversized. */
-        .paypal-btn-wrap{width:100%;max-width:260px;margin:0 auto 16px;overflow:hidden}
-        .paypal-btn-wrap iframe{width:100% !important;max-width:260px !important;height:auto !important;max-height:55px !important}
+        /* Wrapper keeps the Smart Buttons a sensible width. No iframe height
+           overrides: vertical layout stacks PayPal + card buttons and needs the room. */
+        .paypal-btn-wrap{width:100%;max-width:300px;margin:0 auto 16px}
         
         .feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;margin:40px 0}
         .feature-card{background:var(--card);border-radius:12px;padding:20px;border:1px solid var(--border)}
@@ -208,22 +206,33 @@
             <p style="font-size:0.8rem;color:#555;margin-top:6px">Also keeps the free tier alive for everyone 🙏</p>
         </section>
 
-        <script 
-  src="https://www.paypal.com/sdk/js?client-id=BAAHVQb6e24ePOj6Gcjx6n8K66OfYZTH76okeWOOtV8G6fUpyG9ZjkPsniOrOhWOJOLDpLzUOj1lvAQ6Sg&components=hosted-buttons&disable-funding=venmo&currency=USD">
-</script>
-          // Shared renderer for both PayPal button placements on this page:
-          // this standalone #pricing section (visible immediately) and the
-          // post-scan pro-card further down (rendered only once script.js
-          // un-hides #resultSection, since PayPal measures 0x0 in a hidden ancestor).
+        <!-- PayPal Subscriptions SDK: loaded ONCE per page. -->
+        <script src="https://www.paypal.com/sdk/js?client-id=BAAeCD1sDAIYZBNjPMiO1T22yrES7MSw88IzCeaPDGUsYp-E7yscyppWXfxuHfQK9V-6R9S0EKXucNjYEU&vault=true&intent=subscription" data-sdk-integration-source="button-factory"></script>
+        <script>
+          // Shared renderer for both subscribe-button placements on this page:
+          // the standalone #pricing section (visible immediately) and the
+          // post-scan pro-card (rendered only once script.js un-hides
+          // #resultSection, since PayPal measures 0x0 in a hidden ancestor).
+          var PAYPAL_PLAN_ID = 'P-85559645GK6798507NLD2FII';
           window.renderPayPalButton = function (containerId) {
             var container = document.getElementById(containerId);
             if (!container || container.childElementCount > 0) return; // missing or already rendered
-            if (typeof paypal === 'undefined' || !paypal.HostedButtons) {
+            if (typeof paypal === 'undefined' || !paypal.Buttons) {
               setTimeout(function () { window.renderPayPalButton(containerId); }, 200); // SDK still loading
               return;
             }
-            paypal.HostedButtons({
-              hostedButtonId: "RJ2LE5FD4KN8C",
+            paypal.Buttons({
+              style: { shape: 'pill', color: 'gold', layout: 'vertical', label: 'subscribe' },
+              createSubscription: function (data, actions) {
+                return actions.subscription.create({ plan_id: PAYPAL_PLAN_ID });
+              },
+              onApprove: function (data) {
+                window.markProUnlocked && window.markProUnlocked(data);
+              },
+              onError: function (err) {
+                console.error('PayPal error:', err);
+                alert('Sorry, PayPal could not complete the checkout. You have not been charged. Please try again.');
+              }
             }).render('#' + containerId);
           };
           // This section is visible from page load, so render right away.
@@ -330,11 +339,11 @@
                 </div>
                 <!-- PayPal Hosted Button -->
                 <div class="paypal-btn-wrap">
-                  <div id="paypal-container-RJ2LE5FD4KN8C"></div>
+                  <div id="paypal-container-pro"></div>
                 </div>
                 <!-- SDK already loaded once, and window.renderPayPalButton already defined,
                      by the standalone #pricing section above. script.js calls
-                     window.renderPayPalButton('paypal-container-RJ2LE5FD4KN8C') right after
+                     window.renderPayPalButton('paypal-container-pro') right after
                      it un-hides #resultSection. -->
                 <p style="font-size:0.85rem;color:var(--muted);margin-top:8px">🔒 Secure checkout via PayPal · Cancel anytime</p>
                 <p style="font-size:0.8rem;color:#555;margin-top:6px">Also keeps the free tier alive for everyone 🙏</p>
@@ -507,7 +516,7 @@
         <p style="color:#a0a0a8;font-size:0.95rem;margin:14px 0 6px">Unlimited analyses · No email gate<br>Full flag breakdown · Priority speed</p>
         <p style="color:#a0a0a8;font-size:0.85rem;margin-bottom:20px">Also keeps the free tier alive for everyone — thank you 🙏</p>
         <!-- Upgrade CTA button — links to pro card on page -->
-        <a href="#paypal-container-RJ2LE5FD4KN8C" onclick="closeProPopup()" style="display:block;background:#f59e0b;color:#111;font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;padding:14px 24px;border-radius:12px;text-decoration:none;margin-bottom:10px">
+        <a href="#paypal-container-pro" onclick="closeProPopup()" style="display:block;background:#f59e0b;color:#111;font-family:'Syne',sans-serif;font-weight:700;font-size:1rem;padding:14px 24px;border-radius:12px;text-decoration:none;margin-bottom:10px">
           ⚡ Get Pro — $9/month
         </a>
         <p style="font-size:0.8rem;color:#555;margin-top:6px">🔒 Secure checkout via PayPal · Cancel anytime</p>
