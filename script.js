@@ -390,7 +390,7 @@ function renderResults(payload) {
   }
 
   $('resultSection')?.classList.remove('hidden');
-  window.renderPayPalButton && window.renderPayPalButton('paypal-container-RJ2LE5FD4KN8C'); // container has layout now, safe to render
+  window.renderPayPalButton && window.renderPayPalButton('paypal-container-pro'); // container has layout now, safe to render
   window.scrollTo({ top: ($('resultSection')?.offsetTop || 300) - 80, behavior: 'smooth' });
   scheduleProPopup(); // trigger popup 5 sec after results appear
 }
@@ -646,6 +646,14 @@ function isProUser() {
 // this bypass as a known, disclosed gap rather than a silent one.
 function markProUnlocked(paypalData) {
   try { localStorage.setItem(PRO_KEY, '1'); } catch(e) {}
+  // Keep PayPal's subscription ID so a future backend/webhook check can match it.
+  try { if (paypalData && paypalData.subscriptionID) localStorage.setItem('ts_sub_id', paypalData.subscriptionID); } catch(e) {}
+  // Replace the subscribe buttons with a confirmation so the buyer sees something happened.
+  document.querySelectorAll('.paypal-btn-wrap').forEach(function (el) {
+    el.innerHTML = '<p style="color:#4ade80;font-weight:600;margin:0">✅ You\'re Pro — unlimited scans unlocked. Thank you!</p>';
+  });
+  const proCounter = $('scanCounterNote');
+  if (proCounter) proCounter.textContent = '⚡ Pro — unlimited scans';
   $('proPopup') && ($('proPopup').style.display = 'none');
   closeProModal();
   // If the gate is currently showing (daily limit hit), immediately
