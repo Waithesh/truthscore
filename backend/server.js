@@ -32,6 +32,13 @@ app.set('trust proxy', 1);
 // about to be redirected anyway.
 const CANONICAL_HOST = 'truthscore.online';
 app.use((req, res, next) => {
+  // NEVER redirect API/health traffic. script.js and the Chrome extension call
+  // https://truthscore.onrender.com/api/analyze cross-origin. Browsers refuse
+  // to follow a redirect on a CORS preflight (OPTIONS), so a 301 here makes
+  // fetch() throw a TypeError -> "Could not reach the analysis server."
+  // Redirect only page loads (GET/HEAD) outside /api and /health.
+  if (req.path.startsWith('/api/') || req.path === '/health') return next();
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
   const host = req.hostname;
   const isCanonical = host === CANONICAL_HOST && req.secure;
   if (!isCanonical && host && (host === CANONICAL_HOST || host.endsWith('.onrender.com') || host === 'www.truthscore.online')) {
