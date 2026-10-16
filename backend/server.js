@@ -93,7 +93,7 @@ const GEMINI_KEY = process.env.GEMINI_API_KEY;
 if (!GEMINI_KEY) {
   console.warn('WARNING: GEMINI_API_KEY not set. Web-grounded and transcript analysis will be skipped.');
 }
-const GEMINI_MODEL    = 'gemini-2.0-flash'; // stable, free-tier compatible model
+const GEMINI_MODEL    = 'gemini-3.6-flash'; // stable model ID per Google's docs (Gemini 3.6 Flash)
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 // ── Low-level Gemini call via plain REST (no SDK) ─────────────────────
@@ -115,7 +115,7 @@ async function callGemini(prompt, { grounded = false } = {}) {
 
     const res = await axios.post(`${GEMINI_ENDPOINT}?key=${GEMINI_KEY}`, body, {
       headers: { 'Content-Type': 'application/json' },
-      timeout: 20000
+      timeout: 45000 // 3.x models think before answering; grounded calls need more headroom than 20s
     });
     const candidate = res.data?.candidates?.[0];
     const parts = candidate?.content?.parts || [];
