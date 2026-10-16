@@ -93,7 +93,7 @@ const GEMINI_KEY = process.env.GEMINI_API_KEY;
 if (!GEMINI_KEY) {
   console.warn('WARNING: GEMINI_API_KEY not set. Web-grounded and transcript analysis will be skipped.');
 }
-const GEMINI_MODEL    = 'gemini-3.6-flash'; // GA as of July 21, 2026 — 2.5-flash was retired for new users
+const GEMINI_MODEL    = 'gemini-2.0-flash'; // stable, free-tier compatible model
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 // ── Low-level Gemini call via plain REST (no SDK) ─────────────────────
@@ -256,6 +256,61 @@ async function fetchYouTubeData(videoId) {
     duration: v.contentDetails?.duration || null,
     channel
   };
+}
+
+// ── Redirect chain tracer ─────────────────────────────────────────────
+// Follows every URL in the video description through all hops and returns
+// the final destination. Catches scam pages hiding behind link shorteners
+// (bit.ly, tinyurl, etc.) or behind seemingly legitimate intermediate domains.
+async function traceRedirectChains(description) {
+  if (!description) return [];
+
+  // Extract all URLs from description
+  const urlPattern = /https?:\/\/[^\s"<>)\]]+/g;
+  const rawUrls = [...new Set((description.match(urlPattern) || []))].slice(0, 10); // cap at 10 URLs
+  if (rawUrls.length === 0) return [];
+
+  const results = [];
+
+  for (const url of rawUrls) {
+    try {
+      let current = url;
+      const chain = [url];
+      let hops = 0;
+      const maxHops = 8;
+
+      while (hops < maxHops) {
+        const res = await axios.get(current, {
+          maxRedirects: 0,          // follow manually so we can log each hop
+          validateStatus: s => s < 400 || s === 301 || s === 302 || s === 307 || s === 308,
+          timeout: 5000,
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TruthScore/1.0)' }
+        });
+
+        const location = res.headers?.location;
+        if (!location || ![301, 302, 307, 308].includes(res.status)) break;
+
+        // Resolve relative redirects
+        const next = location.startsWith('http') ? location : new URL(location, current).href;
+        if (chain.includes(next)) break; // redirect loop guard
+        chain.push(next);
+        current = next;
+        hops++;
+      }
+
+      const finalDomain = (() => { try { return new URL(current).hostname; } catch(e) { return current; } })();
+      const startDomain  = (() => { try { return new URL(url).hostname; } catch(e) { return url; } })();
+      const hasRedirect  = chain.length > 1;
+      const suspicious   = hasRedirect && finalDomain !== startDomain && hops >= 2;
+
+      results.push({ original: url, final: current, chain, hops, suspicious });
+    } catch(e) {
+      // Unreachable URL or timeout — note it but don't crash
+      results.push({ original: url, final: null, chain: [url], hops: 0, suspicious: false, error: e.message });
+    }
+  }
+
+  return results;
 }
 
 // ── Fetch transcript (unofficial — YouTube's caption API requires OAuth
@@ -625,6 +680,27 @@ async function computeAnalysis(videoId) {
   // gets merged in — this is what lets the frontend group results by
   // source instead of showing one flat, undifferentiated list.
   analysis.flags = analysis.flags.map(f => ({ ...f, origin: 'youtube' }));
+
+  // ── Redirect chain analysis — follows all URLs in description ────────
+  const redirectResults = await traceRedirectChains(data.description);
+  const suspiciousRedirects = redirectResults.filter(r => r.suspicious);
+  if (suspiciousRedirects.length > 0) {
+    analysis.flags.push({
+      type: 'red',
+      text: `${suspiciousRedirects.length} suspicious redirect chain${suspiciousRedirects.length > 1 ? 's' : ''} detected in description`,
+      impact: `Links appear to go somewhere different from where they claim — final destinations: ${suspiciousRedirects.map(r => { try { return new URL(r.final).hostname; } catch(e) { return r.final || 'unknown'; }}).join(', ')}`,
+      origin: 'redirect'
+    });
+    analysis.score = Math.max(0, analysis.score - 15);
+  } else if (redirectResults.length > 0) {
+    analysis.flags.push({
+      type: 'green',
+      text: `${redirectResults.length} description link${redirectResults.length > 1 ? 's' : ''} traced — no suspicious redirects found`,
+      impact: 'Links lead where they claim to lead',
+      origin: 'redirect'
+    });
+  }
+  analysis.redirectChains = redirectResults;
 
   // Three independent signals, blended with NORMALIZED weights — meaning
   // if a signal doesn't fire (e.g. transcript almost always won't, since
