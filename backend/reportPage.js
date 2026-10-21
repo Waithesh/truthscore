@@ -89,6 +89,15 @@ function renderReportPage(summary) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-NBX85PJ1YJ"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-NBX85PJ1YJ');
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${esc(title)} | TruthScore</title>
@@ -149,8 +158,7 @@ function renderReportPage(summary) {
   .pro-card{background:linear-gradient(135deg,#1a1a25,#252535);border-radius:20px;padding:32px 24px;margin:40px 0;border:2px solid var(--amber);text-align:center}
   .pro-card h3{font-family:'Syne',sans-serif;margin-bottom:10px;font-size:1.4rem}
   .price{font-size:2rem;font-family:'Syne',sans-serif;font-weight:800;color:var(--amber);margin:8px 0}
-  .paypal-btn-wrap{width:180px;height:46px;margin:0 auto 12px;overflow:hidden;position:relative}
-  .paypal-btn-wrap > div{transform:scale(0.6);transform-origin:top left;width:166.7%}
+  .paypal-btn-wrap{width:100%;max-width:300px;margin:0 auto 12px}
   .sources-card{background:var(--card);border-radius:16px;padding:25px;margin:25px 0;border:1px solid var(--border)}
   .sources-card h2{font-family:'Syne',sans-serif;margin-bottom:6px;font-size:1.1rem}
   .sources-card p.hint{color:var(--muted);font-size:0.85rem;margin-bottom:12px}
@@ -200,7 +208,7 @@ function renderReportPage(summary) {
   <div class="pro-card">
     <h3>⚡ TruthScore Pro</h3>
     <p style="color:var(--muted);margin-bottom:10px">Unlimited scans, live web cross-reference on every video, no email gate.</p>
-    <div class="price">$18<span style="font-size:1rem;color:var(--muted);font-weight:400">/month</span></div>
+    <div class="price">$9<span style="font-size:1rem;color:var(--muted);font-weight:400">/month</span></div>
     <div class="paypal-btn-wrap">
       <div id="paypal-container-report"></div>
     </div>
@@ -212,13 +220,31 @@ function renderReportPage(summary) {
   </footer>
 </div>
 
-<script src="https://www.paypal.com/sdk/js?client-id=BAAHVQb6e24ePOj6Gcjx6n8K66OfYZTH76okeWOOtV8G6fUpyG9ZjkPsniOrOhWOJOLDpLzUOj1lvAQ6Sg&components=hosted-buttons&disable-funding=venmo&currency=USD"></script>
+<script src="https://www.paypal.com/sdk/js?client-id=BAAeCD1sDAIYZBNjPMiO1T22yrES7MSw88IzCeaPDGUsYp-E7yscyppWXfxuHfQK9V-6R9S0EKXucNjYEU&vault=true&intent=subscription" data-sdk-integration-source="button-factory"></script>
 <script>
+  // Same $9/month subscription plan as the homepage (index.html).
   (function renderPP(){
     var c = document.getElementById('paypal-container-report');
-    if (!c) return;
-    if (typeof paypal === 'undefined' || !paypal.HostedButtons) { setTimeout(renderPP, 200); return; }
-    paypal.HostedButtons({ hostedButtonId: "RJ2LE5FD4KN8C" }).render('#paypal-container-report');
+    if (!c || c.childElementCount > 0) return;
+    if (typeof paypal === 'undefined' || !paypal.Buttons) { setTimeout(renderPP, 200); return; }
+    paypal.Buttons({
+      style: { shape: 'pill', color: 'gold', layout: 'vertical', label: 'subscribe' },
+      createSubscription: function (data, actions) {
+        return actions.subscription.create({ plan_id: 'P-85559645GK6798507NLD2FII' });
+      },
+      onApprove: function (data) {
+        // Same localStorage keys the homepage's markProUnlocked() writes, and
+        // this page is on the same origin, so Pro carries over to the scanner.
+        try { localStorage.setItem('ts_is_pro', '1'); } catch (e) {}
+        try { if (data && data.subscriptionID) localStorage.setItem('ts_sub_id', data.subscriptionID); } catch (e) {}
+        var w = document.querySelector('.paypal-btn-wrap');
+        if (w) w.innerHTML = '<p style="color:#4ade80;font-weight:600;margin:0">\u2705 You are Pro \u2014 unlimited scans unlocked. Thank you!</p>';
+      },
+      onError: function (err) {
+        console.error('PayPal error:', err);
+        alert('Sorry, PayPal could not complete the checkout. You have not been charged. Please try again.');
+      }
+    }).render('#paypal-container-report');
   })();
   document.getElementById('copyBtn')?.addEventListener('click', function () {
     navigator.clipboard.writeText(window.location.href).then(() => {
