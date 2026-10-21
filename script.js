@@ -16,7 +16,7 @@ const SHEETS_URL    = 'https://script.google.com/macros/s/AKfycbz_Gm3jeFFj8WzWat
 const LS_KEY        = 'ts_email_given'; // localStorage key for returning users (legacy — no longer used to bypass the gate, see note below)
 
 // ── DAILY FREE SCAN LIMIT ──────────────────────────
-// 3 full scans/day, no email required. Beyond that, the result stays
+// 5 full scans/day, no email required. Beyond that, the result stays
 // locked and the gate points to Pro instead of offering a free
 // unlock-by-email — the old "give an email, unlock forever, free" gate
 // meant nobody ever needed to pay. This is tracked per-browser via
@@ -24,7 +24,7 @@ const LS_KEY        = 'ts_email_given'; // localStorage key for returning users 
 // incognito window resets it) — there's no login system to attach a
 // real per-person limit to, so this is the honest ceiling of what a
 // no-backend-auth app can enforce.
-const FREE_DAILY_LIMIT = 3;
+const FREE_DAILY_LIMIT = 5;
 const SCAN_COUNT_KEY   = 'ts_scan_count';
 const SCAN_DATE_KEY    = 'ts_scan_date';
 
@@ -41,6 +41,19 @@ function incrementScanCount() {
     localStorage.setItem(SCAN_COUNT_KEY, String(count));
     return count;
   } catch(e) { return 1; } // storage unavailable — fail open rather than block the scan
+}
+
+// Read-only twin of incrementScanCount(): would the NEXT scan still be
+// inside today's free allowance? Used to decide, before rendering, whether
+// to expose the public /report/ URL. Without this, a blocked scan still got
+// pushState'd to /report/<id>, and a plain refresh loaded the full,
+// ungated server-rendered report — defeating the gate.
+function peekScanAllowed() {
+  try {
+    const sameDay = localStorage.getItem(SCAN_DATE_KEY) === todayStr();
+    const used = sameDay ? parseInt(localStorage.getItem(SCAN_COUNT_KEY) || '0', 10) : 0;
+    return used + 1 <= FREE_DAILY_LIMIT;
+  } catch(e) { return true; } // storage unavailable — fail open, same as incrementScanCount()
 }
 
 // ── UTILS ────────────────────────────────────────
@@ -185,7 +198,7 @@ async function runAnalyze(optId) {
   // Reset state + UI
   _score = null; _title = ''; _report = ''; _flags = []; _webSources = [];
   $('resultSection')?.classList.add('hidden');
-  $('emailGate')    ?.classList.remove('hidden');
+  $('emailGate')    ?.classList.add('hidden'); // only shown by renderResults() once the daily limit is actually hit
   $('flagsCard')    ?.classList.add('hidden'); $('sourcesCard') ?.classList.add('hidden');
 
   const btn = $('analyzeBtn');
@@ -216,7 +229,7 @@ async function runAnalyze(optId) {
     // homepage. Only do this once the domain is actually serving /report
     // (see BACKEND_URL note above) — harmless no-op via history either way,
     // but don't rely on it until then.
-    if (window.history?.pushState && data?.video?.videoId) {
+    if (window.history?.pushState && data?.video?.videoId && (isProUser() || peekScanAllowed())) {
       const reportPath = '/report/' + data.video.videoId;
       if (location.pathname !== reportPath) {
         history.pushState({ videoId: data.video.videoId }, '', reportPath);
@@ -364,7 +377,7 @@ function renderResults(payload) {
   if (gs) { gs.textContent = 'Pro removes the daily limit entirely.'; gs.style.color = 'var(--muted)'; }
 
   // ── Daily free-scan gate ──────────────────────────
-  // <= 3 scans today: full reveal, no gate, no email. Beyond that: stays
+  // <= 5 scans today: full reveal, no gate, no email. Beyond that: stays
   // locked, and the gate pushes to Pro instead of a free email-unlock.
   // Pro users (see isProUser()/markProUnlocked() above) bypass this
   // entirely and never see the counter or the gate.
@@ -554,7 +567,7 @@ function fbCopy(cb) {
 function doReset() {
   _score = null; _title = ''; _report = ''; _flags = []; _webSources = [];
   $('resultSection')?.classList.add('hidden');
-  $('emailGate')    ?.classList.remove('hidden');
+  $('emailGate')    ?.classList.add('hidden'); // only shown by renderResults() once the daily limit is actually hit
   $('flagsCard')    ?.classList.add('hidden'); $('sourcesCard') ?.classList.add('hidden');
   const v = $('videoInput'); if (v) { v.value = ''; v.focus(); }
   if (window.history?.pushState && location.pathname.startsWith('/report/')) {
