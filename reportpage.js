@@ -189,7 +189,7 @@ function renderReportPage(summary) {
   <div class="pro-card">
     <h3>⚡ TruthScore Pro</h3>
     <p style="color:var(--muted);margin-bottom:10px">Unlimited scans, live web cross-reference on every video, no email gate.</p>
-    <div class="price">$18<span style="font-size:1rem;color:var(--muted);font-weight:400">/month</span></div>
+    <div class="price">$9<span style="font-size:1rem;color:var(--muted);font-weight:400">/month</span></div>
     <div class="paypal-btn-wrap">
       <div id="paypal-container-report"></div>
     </div>
