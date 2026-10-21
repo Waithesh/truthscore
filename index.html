@@ -249,17 +249,16 @@
         </script>
 
         <!-- Email Gate Section -->
-        <section class="email-gate" id="emailGate">
-            <h3>🔓 Unlock Full Red Flag Report</h3>
-            <p>Drop your email to see every warning — free, no spam, unsubscribe anytime.</p>
-            <input type="email" id="gateEmail" class="email-input" placeholder="your@email.com" aria-label="Email address">
-            <button id="unlockBtn" class="unlock-btn">Reveal Report</button>
-            <p id="gateStatus" class="gate-status">Free forever. No spam. Unsubscribe anytime.</p>
+        <section class="email-gate hidden" id="emailGate">
+            <h3>🔒 You've used your 5 free scans for today</h3>
+            <p>Your free scans reset tomorrow. Go Pro for unlimited scans — $9/month, cancel anytime.</p>
+            <button id="unlockBtn" class="unlock-btn">Go Pro — $9/month</button>
+            <p id="gateStatus" class="gate-status">Pro removes the daily limit entirely.</p>
             
             <!-- ✅ CHANGE 2: Sample Report Button - ADDED HERE -->
             <div style="margin-top: 15px; text-align: center;">
               <p style="font-size: 14px; color: var(--muted); margin-bottom: 8px;">
-                Not ready to share your email? 
+                Curious what a full report looks like? 
               </p>
               <button onclick="showSampleReport()" 
                       style="background: #f0f0f0; color: #333; border: 1px solid var(--border); 
@@ -277,6 +276,7 @@
                 <h3 id="videoTitle">Video Title</h3>
                 <p class="meta" id="channelInfo">Channel • X yrs old</p>
                 <p class="meta" id="metaInfo">X views • X likes • X comments</p>
+                <p class="meta" id="scanCounterNote"></p>
             </div>
 
             <!-- Score Ring (locked until email) -->
